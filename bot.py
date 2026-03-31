@@ -9,9 +9,12 @@ import requests
 import pytz
 from aiohttp import web
 from PIL import Image 
-from pyrogram import Client, idle, __version__
-from pyrogram.raw.all import layer
-import pyrogram.utils
+
+# Library change: Pyrogram/Pyrofork to Kurigram
+from kurigram import Client, idle, __version__
+from kurigram.raw.all import layer
+import kurigram.utils
+
 from database.ia_filterdb import Media, Media2
 from database.users_chats_db import db
 from info import *
@@ -25,31 +28,31 @@ from logging_helper import LOGGER
 
 botStartTime = time.time()
 
-pyrogram.utils.MIN_CHANNEL_ID = -1009147483647
+# Kurigram/Pyrogram compatibility for long channel IDs
+kurigram.utils.MIN_CHANNEL_ID = -1009147483647
 
 def ping_loop():
     while True:
         try:
-            r = requests.get(URL, timeout=10)
-            if r.status_code == 200:
-                LOGGER.info("✅ Ping Successful")
-            else:
-                LOGGER.error(f"⚠️ Ping Failed: {r.status_code}")
+            if URL:
+                r = requests.get(URL, timeout=10)
+                if r.status_code == 200:
+                    LOGGER.info("✅ Ping Successful")
+                else:
+                    LOGGER.error(f"⚠️ Ping Failed: {r.status_code}")
         except Exception as e:
             LOGGER.error(f"❌ Exception During Ping: {e}")
         time.sleep(120)
 
-
 if URL:
     threading.Thread(target=ping_loop, daemon=True).start()
 
-
-def silentx_plugins_handler(app, plugins_dir: str | Path = "plugins", package_name: str = "plugins") -> list[str]:
+def silentx_plugins_handler(app, plugins_dir: str | Path = "plugins", package_name: str = "plugins"):
     plugins_dir = Path(plugins_dir)
-    loaded_plugins: list[str] = []
+    loaded_plugins = []
 
     if not plugins_dir.exists():
-        LOGGER.warning("Plugins Directory '%s' Does Not Exist.", plugins_dir)
+        LOGGER.warning(f"Plugins Directory '{plugins_dir}' Does Not Exist.")
         return loaded_plugins
 
     for file in sorted(plugins_dir.rglob("*.py")):
@@ -57,113 +60,102 @@ def silentx_plugins_handler(app, plugins_dir: str | Path = "plugins", package_na
             continue
 
         rel_path = file.relative_to(plugins_dir).with_suffix("")
-        import_path = package_name + ".".join([""] + list(rel_path.parts))
+        import_path = package_name + "." + ".".join(list(rel_path.parts))
 
         try:
             spec = importlib.util.spec_from_file_location(import_path, file)
-            if spec is None or spec.loader is None:
-                LOGGER.warning("Skipping %s (No Spec/Loader).", file)
-                continue
-
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            sys.modules[import_path] = module
-            loaded_plugins.append(import_path)
-
-            short_name = import_path.removeprefix(f"{package_name}.")
-            LOGGER.info("🔌 Loaded plugin: %s", short_name)
-
+            if spec is not None and spec.loader is not None:
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                sys.modules[import_path] = module
+                loaded_plugins.append(import_path)
+                LOGGER.info(f"🔌 Loaded plugin: {import_path.split('.')[-1]}")
         except Exception:
-            LOGGER.exception("Failed To Import Plugin: %s", import_path)
-
-    disp = getattr(app, "dispatcher", None)
-    if disp is None:
-        LOGGER.warning("App Has No Dispatcher; Skipping Handler Regroup.")
-        return loaded_plugins
-
-    if 0 in disp.groups:
-        all_handlers = list(disp.groups[0])
-        for i, handler in enumerate(all_handlers):
-            disp.remove_handler(handler, group=0)
-            disp.add_handler(handler, group=i)
-    else:
-        LOGGER.info("No Handlers In Group 0; Nothing To Regroup.")
-
+            LOGGER.exception(f"Failed To Import Plugin: {import_path}")
+    
     return loaded_plugins
 
-
 async def SilentXBotz_start():
-    if MULTIPLE_DB and not DATABASE_URI2:
-        LOGGER.error("DATABASE_URI2 Is Not Provided But MULTIPLE_DB Is Set To True. Please Fill The DATABASE_URI2 Var!")
+    # Basic Checks
+    if MULTIPLE_DATABASE and not DATABASE_URI2:
+        LOGGER.error("DATABASE_URI2 missing but MULTIPLE_DATABASE is True!")
         sys.exit(1)
+    
     if not API_ID or not API_HASH or not BOT_TOKEN:
-        LOGGER.error("Missing required environment variables (API_ID, API_HASH, or BOT_TOKEN)")
+        LOGGER.error("API_ID, API_HASH, or BOT_TOKEN missing!")
         sys.exit(1)
 
-    LOGGER.info("Initializing Your Bot!")
+    LOGGER.info("🚀 Initializing Lucia Bot on Kurigram Engine...")
+    
+    # Starting Main Client
     await SilentX.start()
-    bot_info = await SilentX.get_me()
-    SilentX.username = bot_info.username
+    
+    # Initializing other background clients (Clones)
     await initialize_clients()
-    loaded_plugins = silentx_plugins_handler(SilentX)
-    if loaded_plugins:
-        LOGGER.info("✅ Plugins Loaded: %d", len(loaded_plugins))
-    else:
-        LOGGER.info("⚠️ No Plugins Loaded.")
-    if ON_HEROKU:
-        asyncio.create_task(ping_server())
+    
+    # Loading Plugins for Kurigram
+    silentx_plugins_handler(SilentX)
+
+    # Fetching Banned Data
     try:
         b_users, b_chats = await db.get_banned()
         temp.BANNED_USERS = b_users
         temp.BANNED_CHATS = b_chats
     except Exception as e:
-        LOGGER.error(f"Error fetching banned users/chats: {e}")
+        LOGGER.error(f"Error fetching banned data: {e}")
+
+    # Indexing Database
     try:
         await Media.ensure_indexes()
-        if MULTIPLE_DB:
+        if MULTIPLE_DATABASE:
             await Media2.ensure_indexes()
-            LOGGER.info("Multiple Database Mode On. Now Files Will Be Saved In Second DB If First DB Is Full")
-        else:
-            LOGGER.info("Single DB Mode On! Files Will Be Saved In First Database")
+            LOGGER.info("Multiple DB Mode: Enabled")
     except Exception as e:
-        LOGGER.error(f"Error ensuring indexes: {e}")
+        LOGGER.error(f"DB Index Error: {e}")
+
     me = await SilentX.get_me()
     temp.ME = me.id
     temp.U_NAME = me.username
     temp.B_NAME = me.first_name
     temp.B_LINK = me.mention
     SilentX.username = "@" + me.username
+    
+    # Starting background tasks
     SilentX.loop.create_task(check_expired_premium(SilentX))
-    LOGGER.info(
-        "%s with Pyrofork v%s (Layer %s) started on @%s.",
-        me.first_name,
-        __version__,
-        layer,
-        me.username,
-    )
+    if ON_HEROKU:
+        asyncio.create_task(ping_server())
+
+    LOGGER.info(f"✨ {me.first_name} started on Kurigram (Layer {layer})")
     LOGGER.info(script.LOGO)
+
+    # Log Restart
     tz = pytz.timezone("Asia/Kolkata")
-    today = date.today()
-    now = datetime.now(tz)
-    time_str = now.strftime("%H:%M:%S %p")
+    time_str = datetime.now(tz).strftime("%H:%M:%S %p")
     try:
         await SilentX.send_message(
             chat_id=LOG_CHANNEL,
-            text=script.RESTART_TXT.format(temp.B_LINK, today, time_str),
+            text=script.RESTART_TXT.format(temp.B_LINK, date.today(), time_str)
         )
     except Exception as e:
-        LOGGER.error(f"Error Sending Restart Log: {e}")
-    app = web.AppRunner(await web_server())
-    await app.setup()
-    bind_address = "0.0.0.0"
-    await web.TCPSite(app, bind_address, PORT).start()
+        LOGGER.error(f"Log Channel Error: {e}")
+
+    # Web Server for Hosting
+    app_runner = web.AppRunner(await web_server())
+    await app_runner.setup()
+    await web.TCPSite(app_runner, "0.0.0.0", PORT).start()
 
     await idle()
 
+# Handling shutdown with **kwargs for flexibility
+async def stop_bot(**kwargs):
+    reason = kwargs.get("reason", "Manual Shutdown")
+    LOGGER.info(f"Stopping Service... Reason: {reason}")
+    await SilentX.stop()
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     try:
         loop.run_until_complete(SilentXBotz_start())
     except KeyboardInterrupt:
-        LOGGER.info("Service Stopped Bye 👋")
+        loop.run_until_complete(stop_bot(reason="Keyboard Interrupt"))
+        LOGGER.info("Service Stopped Successfully! 👋")
