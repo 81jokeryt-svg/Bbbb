@@ -25,7 +25,7 @@ from logging_helper import LOGGER
 
 botStartTime = time.time()
 
-pyrogram.utils.MIN_CHANNEL_ID = -1009147483647
+kurigram.utils.MIN_CHANNEL_ID = -1009147483647
 
 def ping_loop():
     while True:
