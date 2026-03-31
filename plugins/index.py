@@ -1,12 +1,12 @@
 import time
 import re
 import asyncio
-from kurigram import Client, filters, enums
-from kurigram.errors import FloodWait
-from kurigram.errors.exceptions.bad_request_400 import ChannelInvalid, ChatAdminRequired, UsernameInvalid, UsernameNotModified
+from pyrogram import Client, filters, enums
+from pyrogram.errors import FloodWait
+from pyrogram.errors.exceptions.bad_request_400 import ChannelInvalid, ChatAdminRequired, UsernameInvalid, UsernameNotModified
 from info import ADMINS, INDEX_REQ_CHANNEL as LOG_CHANNEL
 from database.ia_filterdb import save_file
-from kurigram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from utils import temp, get_readable_time, clean_filename # clean_filename import kiya
 from math import ceil
 from logging_helper import LOGGER
