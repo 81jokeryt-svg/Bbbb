@@ -7,16 +7,19 @@ import pytz
 from datetime import datetime, timedelta, date, time
 from database.users_chats_db import db
 from database.refer import referdb
-from pyrogram.errors.exceptions.bad_request_400 import MediaEmpty, PhotoInvalidDimensions, WebpageMediaEmpty
+
+# --- PYROGRAM SE KURIGRAM ME BADLEIN ---
+from kurigram.errors.exceptions.bad_request_400 import MediaEmpty, PhotoInvalidDimensions, WebpageMediaEmpty
 from Script import script
-import kurigram 
+import kurigram
 from info import *
 from kurigram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, InputMediaPhoto, WebAppInfo
 from kurigram import Client, filters, enums
 from kurigram.errors import FloodWait, UserIsBlocked, MessageNotModified, PeerIdInvalid
+# ---------------------------------------
+
 from utils import *
 from fuzzywuzzy import process
-from database.users_chats_db import db
 from database.ia_filterdb import Media, Media2, get_file_details, get_search_results, get_bad_files
 from logging_helper import LOGGER
 from urllib.parse import quote_plus
@@ -26,6 +29,7 @@ import requests
 import string
 import tracemalloc
 import atexit
+
 
 tracemalloc.start()
 atexit.register(tracemalloc.stop)
