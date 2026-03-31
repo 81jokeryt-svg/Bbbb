@@ -1,10 +1,18 @@
-from pyrogram.errors import InputUserDeactivated, UserNotParticipant, FloodWait, UserIsBlocked, PeerIdInvalid, MessageNotModified
-from info import  *
+# Updated for Kurigram Engine - Lucia Autofilter
+from kurigram.errors import (
+    InputUserDeactivated, 
+    UserNotParticipant, 
+    FloodWait, 
+    UserIsBlocked, 
+    PeerIdInvalid, 
+    MessageNotModified
+)
+from info import *
 from imdbkit import IMDBKit 
 import asyncio
-from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
-from pyrogram import enums
-from typing import Union, Optional, Dict, Any
+from kurigram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
+from kurigram import enums
+from typing import Union, Optional, Dict, Any, List
 from Script import script
 import pytz
 import random 
@@ -13,7 +21,6 @@ import os
 import time as time_module
 from datetime import datetime, date, time, timedelta
 import string
-from typing import List
 from database.users_chats_db import db
 from bs4 import BeautifulSoup
 import aiohttp
@@ -22,11 +29,15 @@ import http.client
 import json
 from logging_helper import LOGGER
 
+# --- Regex & Constants ---
 BTN_URL_REGEX = re.compile(
     r"(\[([^\[]+?)\]\((buttonurl|buttonalert):(?:/{0,2})(.+?)(:same)?\))"
 )
 
-BAD_WORDS_REGEX = re.compile('|'.join(map(re.escape, sorted(BAD_WORDS, key=len, reverse=True))), flags=re.IGNORECASE) if BAD_WORDS else None
+BAD_WORDS_REGEX = re.compile(
+    '|'.join(map(re.escape, sorted(BAD_WORDS, key=len, reverse=True))), 
+    flags=re.IGNORECASE
+) if BAD_WORDS else None
 
 imdb = IMDBKit() 
 BANNED = {}
@@ -34,14 +45,13 @@ SMART_OPEN = '“'
 SMART_CLOSE = '”'
 START_CHAR = ('\'', '"', SMART_OPEN)
 
-
 class temp(object):   
     BANNED_USERS = []
     BANNED_CHATS = []
     SETTINGS = {}
     SETTINGS_EXPIRY = {}
     ME = None
-    CURRENT=int(os.environ.get("SKIP", 2))
+    CURRENT = int(os.environ.get("SKIP", 2))
     CANCEL = False
     B_USERS_CANCEL = False
     B_GROUPS_CANCEL = False 
@@ -54,7 +64,8 @@ class temp(object):
     IMDB_CAP = {}
     VERIFICATIONS = {}
 
-    
+# --- Admin & Broadcast Functions ---
+
 async def is_check_admin(bot, chat_id, user_id):
     try:
         member = await bot.get_chat_member(chat_id, user_id)
@@ -64,323 +75,35 @@ async def is_check_admin(bot, chat_id, user_id):
     
 async def users_broadcast(user_id, message, is_pin):
     try:
-        m=await message.copy(chat_id=user_id)
+        m = await message.copy(chat_id=user_id)
         if is_pin:
             await m.pin(both_sides=True)
         return True, "Success"
     except FloodWait as e:
-        await asyncio.sleep(e.x)
+        await asyncio.sleep(e.value)
         return await users_broadcast(user_id, message, is_pin)
-    except InputUserDeactivated:
+    except (InputUserDeactivated, UserIsBlocked, PeerIdInvalid):
         await db.delete_user(int(user_id))
-        LOGGER.info(f"{user_id}-Removed from Database, since deleted account.")
-        return False, "Deleted"
-    except UserIsBlocked:
-        LOGGER.info(f"{user_id} -Blocked the bot.")
-        await db.delete_user(user_id)
-        return False, "Blocked"
-    except PeerIdInvalid:
-        await db.delete_user(int(user_id))
-        LOGGER.info(f"{user_id} - PeerIdInvalid")
-        return False, "Error"
-    except Exception as e:
+        return False, "Removed"
+    except Exception:
         return False, "Error"
 
 async def groups_broadcast(chat_id, message, is_pin):
     try:
         m = await message.copy(chat_id=chat_id)
         if is_pin:
-            try:
-                await m.pin()
-            except Exception:
-                pass
+            try: await m.pin()
+            except: pass
         return "Success"
     except FloodWait as e:
-        await asyncio.sleep(e.x)
+        await asyncio.sleep(e.value)
         return await groups_broadcast(chat_id, message, is_pin)
-    except Exception as e:
+    except Exception:
         await db.delete_chat(chat_id)
         return "Error"
 
-async def junk_group(chat_id, message):
-    try:
-        kk = await message.copy(chat_id=chat_id)
-        await kk.delete(True)
-        return True, "Succes", 'mm'
-    except FloodWait as e:
-        await asyncio.sleep(e.value)
-        return await junk_group(chat_id, message)
-    except Exception as e:
-        await db.delete_chat(int(chat_id))       
-        LOGGER.info(f"{chat_id} - PeerIdInvalid")
-        return False, "deleted", f'{e}\n\n'
-    
+# --- Utility Functions ---
 
-async def clear_junk(user_id, message):
-    try:
-        key = await message.copy(chat_id=user_id)
-        await key.delete(True)
-        return True, "Success"
-    except FloodWait as e:
-        await asyncio.sleep(e.value)
-        return await clear_junk(user_id, message)
-    except InputUserDeactivated:
-        await db.delete_user(int(user_id))
-        LOGGER.info(f"{user_id}-Removed from Database, since deleted account.")
-        return False, "Deleted"
-    except UserIsBlocked:
-        LOGGER.info(f"{user_id} -Blocked the bot.")
-        return False, "Blocked"
-    except PeerIdInvalid:
-        await db.delete_user(int(user_id))
-        LOGGER.info(f"{user_id} - PeerIdInvalid")
-        return False, "Error"
-    except Exception as e:
-        return False, "Error"
-    
-async def delete_after_delay(message, delay):
-    await asyncio.sleep(delay)
-    try:
-        await message.delete()
-    except Exception:
-        pass
-
-async def get_status(bot_id):
-    try:
-        return await db.movie_update_status(bot_id) or False  
-    except Exception as e:
-        LOGGER.error(f"Error in get_movie_update_status: {e}")
-        return False  
-
-def listx_to_str(k):
-    if k is None or k == "":
-        return "N/A"
-    
-    # Handle non-iterable types first
-    if not hasattr(k, '__iter__') or isinstance(k, (str, int, float)):
-        return str(k)
-    
-    result = []
-    for elem in k:
-        if elem and str(elem).strip():
-            result.append(str(elem).strip())
-    
-    if MAX_LIST_ELM and len(result) > MAX_LIST_ELM:
-        result = result[:int(MAX_LIST_ELM)]
-    
-    return ', '.join(result) if result else "N/A"
-    
-async def get_poster(query, bulk=False, id=False, file=None):
-    if not id:
-        query = (query.strip()).lower()
-        title = query
-        year_val = None
-        
-        year_list = re.findall(r'[1-2]\d{3}$', query, re.IGNORECASE)
-        if year_list:
-            year_val = year_list[0]
-            title = (query.replace(year_val, "")).strip()
-        elif file is not None:
-            year_list = re.findall(r'[1-2]\d{3}', file, re.IGNORECASE)
-            if year_list:
-                year_val = year_list[0]
-        
-        search_result = await asyncio.to_thread(imdb.search_movie, title.lower())
-        if not search_result or not search_result.titles:
-            return None
-        
-        movie_list = search_result.titles[:MAX_LIST_ELM]
-        
-        if year_val:
-            filtered = [m for m in movie_list if m.year and str(m.year) == str(year_val)]
-            if not filtered:
-                filtered = movie_list
-        else:
-            filtered = movie_list
-            
-        kind_filter = ['movie', 'tv series', 'tvSeries', 'tvMiniSeries', 'tvMovie']
-        filtered_kind = [m for m in filtered if m.kind and m.kind in kind_filter]
-        
-        if not filtered_kind:
-            filtered_kind = filtered
-        
-        if bulk:
-            return filtered_kind[:MAX_LIST_ELM]
-            
-        if not filtered_kind:
-            return None
-            
-        movie_brief = filtered_kind[0]
-        movieid_str = movie_brief.imdb_id 
-    else:
-        movieid_str = query
-
-    movie = await asyncio.to_thread(imdb.get_movie, movieid_str)
-    if not movie:
-        return None
-
-    if movie.release_date:
-        date = movie.release_date
-    elif movie.year:
-        date = str(movie.year)
-    else:
-        date = "N/A"
-        
-    plot = movie.plot[0] if isinstance(movie.plot, list) else movie.plot or ""
-    if len(plot) > 800:
-        plot = plot[:800] + "..."
-    imdb_id = movie.imdb_id
-    
-    if not imdb_id.startswith("tt"):
-        imdb_id = f"tt{imdb_id}"
-        
-    return {
-        'title': movie.title,
-        'votes': movie.votes,
-        "aka": listx_to_str(movie.title_akas),
-        "seasons": (
-            len(movie.info_series.display_seasons)
-            if getattr(movie, "info_series", None)
-            and getattr(movie.info_series, "display_seasons", None)
-            else "N/A"
-        ),
-        "box_office": movie.worldwide_gross,
-        'localized_title': movie.title_localized,
-        'kind': movie.kind,
-        "imdb_id": imdb_id,
-        "cast": listx_to_str(movie.stars),
-        "runtime": listx_to_str(movie.duration),
-        "countries": listx_to_str(movie.countries),
-        "certificates": listx_to_str(movie.certificates),
-        "languages": listx_to_str(movie.languages),
-        "director": listx_to_str(movie.directors),
-        "writer": listx_to_str([p.name for p in movie.writers]),
-        "producer": listx_to_str([p.name for p in movie.producers]),
-        "composer": listx_to_str([p.name for p in movie.composers]),
-        "cinematographer": listx_to_str([p.name for p in movie.cinematographers]),
-        "music_team": listx_to_str([p.name for p in movie.music_team]),
-        "distributors": listx_to_str([c.name for c in movie.distributors]),        
-        'release_date': date,
-        'year': movie.year,
-        'genres': listx_to_str(movie.genres),
-        'poster': movie.cover_url,
-        'plot': plot,
-        'rating': str(movie.rating),
-        "url": movie.url or f"https://www.imdb.com/title/{imdb_id}"
-    }
-
-async def fetch_tmdb_data(title: str, year: str = None) -> Optional[Dict[str, Any]]:
-    base_url = "https://image.silentxbotz.tech/api/v2/poster"
-    params = {"title": title.strip()}
-    if year:
-        params["year"] = year
-        
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(base_url, params=params, timeout=aiohttp.ClientTimeout(total=25)) as response:
-                if response.status != 200:
-                    return None
-                data = await response.json()
-
-                raw_director = data.get("director")
-                if isinstance(raw_director, list):
-                    director = ", ".join([str(x) for x in raw_director if x])
-                elif isinstance(raw_director, str):
-                    director = raw_director
-                else:
-                    director = None
-
-                director = director if director else ""    
-                
-                return {
-                    "id": data.get("id"),
-                    "title": data.get("title", title),
-                    "original_title": data.get("original_title", ""),
-                    "original_language": data.get("original_language", "en"),
-                    "kind": data.get("type", "Movie").upper(),
-                    "director": director,
-                    "release_date": data.get("release_date", ""),
-                    "vote_average": f"{data['vote_average']:.1f}" if data.get("vote_average") else "N/A",
-                    "vote_count": f"{data['vote_count']:,}" if data.get("vote_count") else "0",
-                    "genres": data.get("genres", []),
-                    "imdb_id": data.get("imdb_id", ""),
-                    "imdb_url": f"https://www.imdb.com/title/{data.get('imdb_id')}/" if data.get("imdb_id") else "",
-                    "overview": data.get("overview", ""),
-                    "poster_url": data.get("poster_url", ""),
-                    "backdrop_url": data.get("backdrop_url", ""),
-                    "backdrops": data.get("backdrops", {}),
-                    "posters": data.get("posters", {}),
-                    "cast": data.get("cast", [])[:5],
-                    "videos": data.get("videos", []),
-                }
-                
-    except Exception as e:
-        LOGGER.error(f"API Fetch Error: {str(e)}")
-        return None
-
-async def get_best_visual(tmdb_data: Dict) -> Optional[str]:
-    backdrops = tmdb_data.get("backdrops", {})
-    by_language = backdrops.get("by_language", {})    
-    original_lang = tmdb_data.get("original_language")
-    if original_lang and by_language.get(original_lang):
-        return by_language[original_lang][0]["url"]    
-    indian_langs = [
-        "hi", "ta", "te", "kn", "ml", "mr", "bn", "gu", "pa", "or", "as", 
-        "ur", "ne"
-    ]
-    for lang in indian_langs:
-        if by_language.get(lang):
-            return by_language[lang][0]["url"]    
-    if by_language.get("en"):
-        return by_language["en"][0]["url"]
-    if by_language.get("unknown"):
-        return by_language["unknown"][0]["url"]    
-    if backdrops.get("all") and backdrops["all"]:
-        return backdrops["all"][0]["url"]
-    return None
-    
-async def get_shortlink(link, grp_id, is_second_shortener=False, is_third_shortener=False):
-    settings = await get_settings(grp_id)
-    if is_third_shortener:             
-        api, site = settings['api_three'], settings['shortner_three']
-    else:
-        if is_second_shortener:
-            api, site = settings['api_two'], settings['shortner_two']
-        else:
-            api, site = settings['api'], settings['shortner']
-    shortzy = Shortzy(api, site)
-    try:
-        link = await shortzy.convert(link)
-    except Exception as e:
-        link = await shortzy.get_quick_link(link)
-    return link
-
-async def get_settings(group_id):
-    settings = temp.SETTINGS.get(group_id)
-    expiry = temp.SETTINGS_EXPIRY.get(group_id, 0)
-    current_time = time_module.time()
-
-    # Cache settings for 5 minutes (300 seconds)
-    if settings and current_time < expiry:
-        return settings
-
-    settings = await db.get_settings(group_id)
-    temp.SETTINGS[group_id] = settings
-    temp.SETTINGS_EXPIRY[group_id] = current_time + 300
-    return settings
-    
-async def save_group_settings(group_id, key, value):
-    current = await get_settings(group_id)
-    current.update({key: value})
-    temp.SETTINGS[group_id] = current
-    temp.SETTINGS_EXPIRY[group_id] = time_module.time() + 300
-    await db.update_settings(group_id, current)
-
-async def delete_group_setting(group_id, key):
-    await db.delete_setting(group_id, key)
-    if group_id in temp.SETTINGS:
-        temp.SETTINGS.pop(group_id, None)
-    
 def get_size(size):
     units = ["Bytes", "KB", "MB", "GB", "TB", "PB", "EB"]
     size = float(size)
@@ -390,98 +113,88 @@ def get_size(size):
         size /= 1024.0
     return "%.2f %s" % (size, units[i])
 
-def silent_size(size):
-    size = float(size)
-    size_gb = size / (1024 ** 3)
-    return "%.2f GB" % size_gb
-                        
-def extract_tag(file_name: str) -> str:
-    file_name = file_name.lower()
-    file_name = re.sub(r'[\._\-]+', ' ', file_name)
-    patterns = [
-        r'\b(?:s|season)\s*0*(\d{1,2})\s*(?:e|episode)\s*0*(\d{1,2})\b',
-        r'\b(\d{1,2})\s*(?:x|episode)\s*0*(\d{1,2})\b',
-        r'\bs0*(\d{1,2})e0*(\d{1,2})\b',
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, file_name)
-        if match:
-            season = int(match.group(1))
-            episode = int(match.group(2))
-            return f"S{season:02d}E{episode:02d} •"
-    season_match = re.search(r'\b(?:s|season)\s*0*(\d{1,2})\b', file_name)
-    if season_match:
-        season = int(season_match.group(1))
-        return f"S{season:02d} •"
-    quality_match = re.search(r'\b(2160p|1080p|720p|480p|360p|4k)\b', file_name)
-    if quality_match:
-        return f"{quality_match.group(1)} •"
-    return ""
-
-def extract_request_content(message_text):
-    match = re.search(r"<u>(.*?)</u>", message_text)
-    if match:
-        return match.group(1).strip()
-    match = re.search(r"📝 ʀᴇǫᴜᴇꜱᴛ ?: ?(.*?)(?:\n|$)", message_text)
-    if match:
-        return match.group(1).strip()
-    return message_text.strip()
-
 def clean_filename(filename):
-    if not filename:
-        return ""
-    parts = filename.rsplit('.', 1)
-    if len(parts) == 2 and len(parts[1]) <= 5:
-        name, ext = parts
-    else:
-        name, ext = filename, ""
-    original_name = name
-    name = re.sub(r'[_\-\.\+]', ' ', name)  
-    if BAD_WORDS_REGEX:
-        name = BAD_WORDS_REGEX.sub('', name)
-    name = re.sub(r'@\w+\s*', '', name, flags=re.IGNORECASE)
-    name = re.sub(r'#\w+\s*', '', name, flags=re.IGNORECASE)
-    name = re.sub(r'www\.\S+\s*', '', name, flags=re.IGNORECASE)
-    name = re.sub(r'https?://\S+\s*', '', name, flags=re.IGNORECASE)
-    name = re.sub(r'\[\s*', ' ', name, flags=re.IGNORECASE)
-    name = re.sub(r'\s*\]', ' ', name, flags=re.IGNORECASE)
-    name = re.sub(r'\(\s*', ' ', name, flags=re.IGNORECASE)
-    name = re.sub(r'\s*\)', ' ', name, flags=re.IGNORECASE)
-    name = re.sub(r'[^\w\s]', ' ', name)
-    name = re.sub(r'\s+', ' ', name).strip()
-    if not name or not any(c.isalnum() for c in name):
-        words = re.findall(r'[A-Za-z0-9]+', original_name)
-        name = ' '.join(words) if words else "untitled"
-    name = ' '.join(w.capitalize() for w in name.split())  
-    final_result = f"{name}{ext}" if ext else name   
-    return final_result
+    if not filename: return ""
+    name = re.sub(r'[_\-\.\+]', ' ', filename.rsplit('.', 1)[0])  
+    if BAD_WORDS_REGEX: name = BAD_WORDS_REGEX.sub('', name)
+    name = re.sub(r'@\w+|#\w+|https?://\S+|www\.\S+|\[|\]|\(|\)', ' ', name)
+    return ' '.join(w.capitalize() for w in name.split()).strip()
 
-async def replace_words(string):
-    ignorewords = sorted(IGNORE_WORDS, key=len, reverse=True)
-    pattern = r'\b(?:{})\b'.format('|'.join(map(re.escape, ignorewords)))
-    formatted = re.sub(pattern, '', string, flags=re.IGNORECASE)
-    return formatted.replace("-", " ")
+async def delete_after_delay(message, delay):
+    await asyncio.sleep(delay)
+    try: await message.delete()
+    except: pass
+
+# --- IMDB Functions ---
+
+async def get_poster(query, bulk=False, id=False, file=None):
+    try:
+        if not id:
+            search_result = await asyncio.to_thread(imdb.search_movie, str(query))
+            if not search_result or not search_result.titles: return None
+            movieid_str = search_result.titles[0].imdb_id
+        else:
+            movieid_str = query
+
+        movie = await asyncio.to_thread(imdb.get_movie, movieid_str)
+        if not movie: return None
+        
+        plot = movie.plot[0] if isinstance(movie.plot, list) else movie.plot or ""
+        return {
+            'title': movie.title,
+            'imdb_id': movie.imdb_id,
+            'poster': movie.cover_url,
+            'rating': str(movie.rating),
+            'genres': ", ".join(movie.genres) if movie.genres else "N/A",
+            'plot': plot[:800] + "..." if len(plot) > 800 else plot,
+            'year': movie.year,
+            'url': movie.url or f"https://www.imdb.com/title/{movie.imdb_id}"
+        }
+    except Exception as e:
+        LOGGER.error(f"IMDB Error: {e}")
+        return None
+
+# --- Shortener & Settings ---
+
+async def get_shortlink(link, grp_id, is_second_shortener=False, is_third_shortener=False):
+    settings = await get_settings(grp_id)
+    if is_third_shortener:             
+        api, site = settings['api_three'], settings['shortner_three']
+    elif is_second_shortener:
+        api, site = settings['api_two'], settings['shortner_two']
+    else:
+        api, site = settings['api'], settings['shortner']
     
+    shortzy = Shortzy(api, site)
+    try:
+        return await shortzy.convert(link)
+    except:
+        return await shortzy.get_quick_link(link)
+
+async def get_settings(group_id):
+    settings = temp.SETTINGS.get(group_id)
+    if settings and time_module.time() < temp.SETTINGS_EXPIRY.get(group_id, 0):
+        return settings
+    settings = await db.get_settings(group_id)
+    temp.SETTINGS[group_id] = settings
+    temp.SETTINGS_EXPIRY[group_id] = time_module.time() + 300
+    return settings
+
+# --- Formatting Helpers ---
+
 def split_list(l, n):
     for i in range(0, len(l), n):
-        yield l[i:i + n]  
+        yield l[i:i + n]
 
 def get_file_id(msg: Message):
     if msg.media:
-        for message_type in (
-            "photo",
-            "animation",
-            "audio",
-            "document",
-            "video",
-            "video_note",
-            "voice",
-            "sticker"
-        ):
-            obj = getattr(msg, message_type)
+        for m_type in ("photo", "animation", "audio", "document", "video", "video_note", "voice"):
+            obj = getattr(msg, m_type)
             if obj:
-                setattr(obj, "message_type", message_type)
+                setattr(obj, "message_type", m_type)
                 return obj
+    return None
+
 
 def extract_user(message: Message) -> Union[int, str]:
     user_id = None
