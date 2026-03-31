@@ -12,10 +12,10 @@ from Script import script
 from datetime import datetime, timedelta
 from database.refer import referdb
 from database.topdb import silentdb
-from pyrogram.enums import ParseMode, ChatType
-from pyrogram import Client, filters, enums
-from pyrogram.errors import FloodWait, ChatAdminRequired
-from pyrogram.types import *
+from kurigram.enums import ParseMode, ChatType
+from kurigram import Client, filters, enums
+from kurigram.errors import FloodWait, ChatAdminRequired
+from kurigram.types import *
 from database.ia_filterdb import *
 from database.users_chats_db import db
 from info import *
