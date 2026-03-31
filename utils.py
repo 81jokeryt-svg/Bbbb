@@ -1,5 +1,5 @@
 # Fully Migrated to Kurigram by Gemini
-from kurigram.errors import (
+from pyrogram.errors import (
     InputUserDeactivated, 
     UserNotParticipant, 
     FloodWait, 
