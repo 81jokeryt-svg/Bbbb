@@ -14,9 +14,9 @@ from logging_helper import LOGGER
 from typing import Optional, Dict, Any
 from datetime import datetime
 from database.ia_filterdb import save_file
-from kurigram import Client, filters
-from kurigram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from kurigram.enums import ParseMode
+from pyrogram import Client, filters
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.enums import ParseMode
 
 CAPTION_LANGUAGES = ["Hindi", "English", "Bengali", "Tamil", "Telugu", "Malayalam", "Kannada", "Marathi", "Punjabi", "Gujarati", "Korean", "Bhojpuri", "Urdu"]
 
