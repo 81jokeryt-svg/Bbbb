@@ -10,8 +10,8 @@ from kurigram.errors import (
 from info import *
 from imdbkit import IMDBKit 
 import asyncio
-from kurigram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
-from kurigram import enums
+from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
+from pyrogram import enums
 from typing import Union, Optional, Dict, Any, List
 from Script import script
 import pytz
