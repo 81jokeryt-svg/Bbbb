@@ -29,81 +29,12 @@ import http.client
 import json
 from logging_helper import LOGGER
 
-# --- Regex & Constants ---
-BTN_URL_REGEX = re.compile(
-    r"(\[([^\[]+?)\]\((buttonurl|buttonalert):(?:/{0,2})(.+?)(:same)?\))"
-)
-
-BAD_WORDS_REGEX = re.compile(
-    '|'.join(map(re.escape, sorted(BAD_WORDS, key=len, reverse=True))), 
-    flags=re.IGNORECASE
-) if BAD_WORDS else None
-
-imdb = IMDBKit() 
-BANNED = {}
-SMART_OPEN = '“'
-SMART_CLOSE = '”'
-START_CHAR = ('\'', '"', SMART_OPEN)
-
-class temp(object):   
-    BANNED_USERS = []
-    BANNED_CHATS = []
-    SETTINGS = {}
-    SETTINGS_EXPIRY = {}
-    ME = None
-    CURRENT = int(os.environ.get("SKIP", 2))
-    CANCEL = False
-    B_USERS_CANCEL = False
-    B_GROUPS_CANCEL = False 
-    MELCOW = {}
-    U_NAME = None
-    B_NAME = None
-    B_LINK = None
-    GETALL = {}
-    SHORT = {}
-    IMDB_CAP = {}
-    VERIFICATIONS = {}
-
-# --- Broadcast Functions ---
-
-# Fully Migrated to Kurigram by Gemini
-from kurigram.errors import (
-    InputUserDeactivated, 
-    UserNotParticipant, 
-    FloodWait, 
-    UserIsBlocked, 
-    PeerIdInvalid, 
-    MessageNotModified
-)
-from info import *
-from imdbkit import IMDBKit 
-import asyncio
-from kurigram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
-from kurigram import enums
-from typing import Union, Optional, Dict, Any, List
-from Script import script
-import pytz
-import random 
-import re
-import os
-import time as time_module
-from datetime import datetime, date, time, timedelta
-import string
-from database.users_chats_db import db
-from bs4 import BeautifulSoup
-import aiohttp
-from shortzy import Shortzy
-import http.client
-import json
-from logging_helper import LOGGER
-
 # --- Constants & Regex ---
 BTN_URL_REGEX = re.compile(
     r"(\[([^\[]+?)\]\((buttonurl|buttonalert):(?:/{0,2})(.+?)(:same)?\))"
 )
 
-# BAD_WORDS_REGEX ko hum pure word boundary (\b) ke saath use karenge 
-# taaki "Ishq" ke beech ka "q" safe rahe.
+# CRITICAL FIX: Word boundary (\b) use kiya hai taaki "Ishq" ka "q" safe rahe
 BAD_WORDS_REGEX = re.compile(r'\b(' + '|'.join(map(re.escape, sorted(BAD_WORDS, key=len, reverse=True))) + r')\b', flags=re.IGNORECASE) if BAD_WORDS else None
 
 imdb = IMDBKit() 
@@ -131,34 +62,32 @@ class temp(object):
     IMDB_CAP = {}
     VERIFICATIONS = {}
 
-# --- Cleaning Logic (Aapki problem ka solution yahan hai) ---
+# --- Cleaning Logic (Space aur "q" ka solution yahan hai) ---
 
 def clean_filename(filename):
     if not filename:
         return ""
     
-    # 1. Extension (.m4a, .mp4) ko alag karein taaki 'kim4a' wala issue na ho
+    # 1. Extension (.m4a, .mp3) ko alag karein taaki 'kim4a' na bane
     if '.' in filename:
         name = filename.rsplit('.', 1)[0]
     else:
         name = filename
 
-    # 2. Symbols (._-+) ko space se badlein (Isse 'ki.m4a' chipkega nahi)
+    # 2. Symbols (._-+) ko space se badlein. Dot ko space dene se extension se pehle gap rahega.
     name = re.sub(r'[_\-\.\+]', ' ', name)
     
-    # 3. Ads aur Links hatayein
+    # 3. Ads, Links aur Usernames hatayein
     name = re.sub(r'@\w+|#\w+|https?://\S+|www\.\S+|\[|\]|\(|\)', ' ', name)
 
-    # 4. CRITICAL FIX: "q" aur "ki" wala masla
-    # Hum sirf unhi words ko hatayenge jo BAD_WORDS list mein hain aur POORE word hain.
-    # Isse "Ishq" ka "q" nahi hatega kyunki humne \b (boundary) use kiya hai.
+    # 4. Bad Words Fix: Sirf poore word hatenge, "Ishq" ka "q" nahi hatega
     if BAD_WORDS_REGEX:
         name = BAD_WORDS_REGEX.sub('', name)
 
-    # 5. Har word ka pehla letter capital karein aur extra spaces saaf karein
+    # 5. Extra spaces saaf karein aur Har word ka pehla letter Capital karein
     return ' '.join(w.capitalize() for w in name.split()).strip()
 
-# --- Helper Functions ---
+# --- Utility Functions ---
 
 def get_size(size):
     units = ["Bytes", "KB", "MB", "GB", "TB", "PB", "EB"]
@@ -175,7 +104,7 @@ def listx_to_str(k):
     res = [str(e).strip() for e in k if e]
     return ", ".join(res[:int(MAX_LIST_ELM)]) if res else "N/A"
 
-# --- Broadcast ---
+# --- Broadcast Logic ---
 
 async def users_broadcast(user_id, message, is_pin):
     try:
@@ -184,7 +113,7 @@ async def users_broadcast(user_id, message, is_pin):
             await m.pin(both_sides=True)
         return True, "Success"
     except FloodWait as e:
-        await asyncio.sleep(e.value) # Kurigram Engine Fix
+        await asyncio.sleep(e.value) # Kurigram uses .value
         return await users_broadcast(user_id, message, is_pin)
     except (InputUserDeactivated, UserIsBlocked, PeerIdInvalid):
         await db.delete_user(int(user_id))
@@ -192,7 +121,7 @@ async def users_broadcast(user_id, message, is_pin):
     except Exception:
         return False, "Error"
 
-# --- IMDB & UI ---
+# --- IMDB & Poster Logic ---
 
 async def get_poster(query, bulk=False, id=False, file=None):
     try:
@@ -222,6 +151,8 @@ async def get_poster(query, bulk=False, id=False, file=None):
     except Exception as e:
         LOGGER.error(f"IMDB Error: {e}")
         return None
+
+# --- UI & Caption Logic ---
 
 def parser(text, keyword):
     if "buttonalert" in text:
@@ -259,6 +190,8 @@ async def get_cap(settings, remaining_seconds, files, query, total_results, sear
         cap += f"\n<b>{file_num}. <a href='https://telegram.me/{temp.U_NAME}?start=file_{query.message.chat.id}_{file.file_id}'>{get_size(file.file_size)} | {clean_filename(file.file_name)}</a></b>"
     
     return cap
+
+# --- User & Time Helpers ---
 
 def extract_user(message: Message) -> Union[int, str]:
     if message.reply_to_message:
