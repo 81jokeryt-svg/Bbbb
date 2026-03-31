@@ -1,4 +1,4 @@
-kurigram 
+kurigram==2.2.19
 uvloop 
 tgcrypto
 pymongo[srv]==4.11.1
@@ -7,7 +7,7 @@ marshmallow==3.26.1
 umongo
 requests
 bs4
-git+https://github.com/NBBotz/IMDBKit.git@main
+git+https://github.com/kurigram/kurigram.git
 shortzy
 datetime
 pytz
