@@ -9,7 +9,7 @@ from logging import (
 )
 
 getLogger("requests").setLevel(WARNING)
-getLogger("pyrogram").setLevel(ERROR)
+getLogger("kurigram").setLevel(ERROR)
 getLogger("aiohttp").setLevel(ERROR)
 getLogger("pymongo").setLevel(WARNING)
 getLogger("aiohttp").setLevel(WARNING)
