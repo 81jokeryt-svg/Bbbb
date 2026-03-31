@@ -11,9 +11,9 @@ from aiohttp import web
 from PIL import Image 
 
 # Library change: Pyrogram/Pyrofork to Kurigram
-from kurigram import Client, idle, __version__
-from kurigram.raw.all import layer
-import kurigram.utils
+from pyrogram import Client, idle, __version__
+from pyrogram.raw.all import layer
+import pyrogram.utils
 
 from database.ia_filterdb import Media, Media2
 from database.users_chats_db import db
@@ -29,7 +29,7 @@ from logging_helper import LOGGER
 botStartTime = time.time()
 
 # Kurigram/Pyrogram compatibility for long channel IDs
-kurigram.utils.MIN_CHANNEL_ID = -1009147483647
+pyrogram.utils.MIN_CHANNEL_ID = -1009147483647
 
 def ping_loop():
     while True:
