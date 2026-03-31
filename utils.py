@@ -66,22 +66,99 @@ class temp(object):
 
 # --- Broadcast Functions ---
 
-async def users_broadcast(user_id, message, is_pin):
-    try:
-        m = await message.copy(chat_id=user_id)
-        if is_pin:
-            await m.pin(both_sides=True)
-        return True, "Success"
-    except FloodWait as e:
-        await asyncio.sleep(e.value) # Kurigram uses .value
-        return await users_broadcast(user_id, message, is_pin)
-    except (InputUserDeactivated, UserIsBlocked, PeerIdInvalid):
-        await db.delete_user(int(user_id))
-        return False, "Removed"
-    except Exception:
-        return False, "Error"
+# Fully Migrated to Kurigram by Gemini
+from kurigram.errors import (
+    InputUserDeactivated, 
+    UserNotParticipant, 
+    FloodWait, 
+    UserIsBlocked, 
+    PeerIdInvalid, 
+    MessageNotModified
+)
+from info import *
+from imdbkit import IMDBKit 
+import asyncio
+from kurigram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
+from kurigram import enums
+from typing import Union, Optional, Dict, Any, List
+from Script import script
+import pytz
+import random 
+import re
+import os
+import time as time_module
+from datetime import datetime, date, time, timedelta
+import string
+from database.users_chats_db import db
+from bs4 import BeautifulSoup
+import aiohttp
+from shortzy import Shortzy
+import http.client
+import json
+from logging_helper import LOGGER
 
-# --- Utility Functions ---
+# --- Constants & Regex ---
+BTN_URL_REGEX = re.compile(
+    r"(\[([^\[]+?)\]\((buttonurl|buttonalert):(?:/{0,2})(.+?)(:same)?\))"
+)
+
+# BAD_WORDS_REGEX ko hum pure word boundary (\b) ke saath use karenge 
+# taaki "Ishq" ke beech ka "q" safe rahe.
+BAD_WORDS_REGEX = re.compile(r'\b(' + '|'.join(map(re.escape, sorted(BAD_WORDS, key=len, reverse=True))) + r')\b', flags=re.IGNORECASE) if BAD_WORDS else None
+
+imdb = IMDBKit() 
+BANNED = {}
+SMART_OPEN = '“'
+SMART_CLOSE = '”'
+START_CHAR = ('\'', '"', SMART_OPEN)
+
+class temp(object):   
+    BANNED_USERS = []
+    BANNED_CHATS = []
+    SETTINGS = {}
+    SETTINGS_EXPIRY = {}
+    ME = None
+    CURRENT = int(os.environ.get("SKIP", 2))
+    CANCEL = False
+    B_USERS_CANCEL = False
+    B_GROUPS_CANCEL = False 
+    MELCOW = {}
+    U_NAME = None
+    B_NAME = None
+    B_LINK = None
+    GETALL = {}
+    SHORT = {}
+    IMDB_CAP = {}
+    VERIFICATIONS = {}
+
+# --- Cleaning Logic (Aapki problem ka solution yahan hai) ---
+
+def clean_filename(filename):
+    if not filename:
+        return ""
+    
+    # 1. Extension (.m4a, .mp4) ko alag karein taaki 'kim4a' wala issue na ho
+    if '.' in filename:
+        name = filename.rsplit('.', 1)[0]
+    else:
+        name = filename
+
+    # 2. Symbols (._-+) ko space se badlein (Isse 'ki.m4a' chipkega nahi)
+    name = re.sub(r'[_\-\.\+]', ' ', name)
+    
+    # 3. Ads aur Links hatayein
+    name = re.sub(r'@\w+|#\w+|https?://\S+|www\.\S+|\[|\]|\(|\)', ' ', name)
+
+    # 4. CRITICAL FIX: "q" aur "ki" wala masla
+    # Hum sirf unhi words ko hatayenge jo BAD_WORDS list mein hain aur POORE word hain.
+    # Isse "Ishq" ka "q" nahi hatega kyunki humne \b (boundary) use kiya hai.
+    if BAD_WORDS_REGEX:
+        name = BAD_WORDS_REGEX.sub('', name)
+
+    # 5. Har word ka pehla letter capital karein aur extra spaces saaf karein
+    return ' '.join(w.capitalize() for w in name.split()).strip()
+
+# --- Helper Functions ---
 
 def get_size(size):
     units = ["Bytes", "KB", "MB", "GB", "TB", "PB", "EB"]
@@ -92,22 +169,30 @@ def get_size(size):
         size /= 1024.0
     return "%.2f %s" % (size, units[i])
 
-def clean_filename(filename):
-    if not filename:
-        return ""
-    name = re.sub(r'[_\-\.\+]', ' ', filename.rsplit('.', 1)[0])  
-    if BAD_WORDS_REGEX:
-        name = BAD_WORDS_REGEX.sub('', name)
-    name = re.sub(r'@\w+|#\w+|https?://\S+|www\.\S+|\[|\]|\(|\)', ' ', name)
-    return ' '.join(w.capitalize() for w in name.split()).strip()
-
 def listx_to_str(k):
     if not k: return "N/A"
     if not hasattr(k, '__iter__') or isinstance(k, (str, int, float)): return str(k)
     res = [str(e).strip() for e in k if e]
     return ", ".join(res[:int(MAX_LIST_ELM)]) if res else "N/A"
 
-# --- IMDB Logic ---
+# --- Broadcast ---
+
+async def users_broadcast(user_id, message, is_pin):
+    try:
+        m = await message.copy(chat_id=user_id)
+        if is_pin:
+            await m.pin(both_sides=True)
+        return True, "Success"
+    except FloodWait as e:
+        await asyncio.sleep(e.value) # Kurigram Engine Fix
+        return await users_broadcast(user_id, message, is_pin)
+    except (InputUserDeactivated, UserIsBlocked, PeerIdInvalid):
+        await db.delete_user(int(user_id))
+        return False, "Removed"
+    except Exception:
+        return False, "Error"
+
+# --- IMDB & UI ---
 
 async def get_poster(query, bulk=False, id=False, file=None):
     try:
@@ -132,13 +217,11 @@ async def get_poster(query, bulk=False, id=False, file=None):
             'plot': plot[:800] + "..." if len(plot) > 800 else plot,
             'year': movie.year,
             'url': movie.url or f"https://www.imdb.com/title/{movie.imdb_id}",
-            **locals() # Passes other needed fields to template
+            **locals()
         }
     except Exception as e:
         LOGGER.error(f"IMDB Error: {e}")
         return None
-
-# --- Main Caption & UI Logic ---
 
 def parser(text, keyword):
     if "buttonalert" in text:
