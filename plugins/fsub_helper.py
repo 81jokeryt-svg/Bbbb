@@ -1,9 +1,9 @@
 import time
 import asyncio
-from kurigram import enums # Pyrogram -> Kurigram
+from pyrogram import enums # Pyrogram -> Kurigram
 from logging_helper import LOGGER 
 from database.users_chats_db import db
-from kurigram.errors import UserNotParticipant, ChatAdminRequired # Pyrogram -> Kurigram
+from pyrogram.errors import UserNotParticipant, ChatAdminRequired # Pyrogram -> Kurigram
 
 CHANNEL_CACHE = {}
 CACHE_TTL = 3600
