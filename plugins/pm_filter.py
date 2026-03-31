@@ -9,13 +9,13 @@ from database.users_chats_db import db
 from database.refer import referdb
 
 # --- PYROGRAM SE KURIGRAM ME BADLEIN ---
-from kurigram.errors.exceptions.bad_request_400 import MediaEmpty, PhotoInvalidDimensions, WebpageMediaEmpty
+from pyrogram.errors.exceptions.bad_request_400 import MediaEmpty, PhotoInvalidDimensions, WebpageMediaEmpty
 from Script import script
-import kurigram
+import pyrogram
 from info import *
-from kurigram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, InputMediaPhoto, WebAppInfo
-from kurigram import Client, filters, enums
-from kurigram.errors import FloodWait, UserIsBlocked, MessageNotModified, PeerIdInvalid
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, InputMediaPhoto, WebAppInfo
+from pyrogram import Client, filters, enums
+from pyrogram.errors import FloodWait, UserIsBlocked, MessageNotModified, PeerIdInvalid
 # ---------------------------------------
 
 from utils import *
